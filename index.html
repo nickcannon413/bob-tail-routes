@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b3a6e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bobtail Routes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Bobtail Route Planner</title>
+<style>
+/* Layout: one narrow column built for a phone in a truck cab. Big tap targets, plan on top, route cards below. */
+:root {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --fg: #14202b;
+  --muted: #566878;
+  --line: #d5dce3;
+  --accent: #0b5fc4;
+  --accent-fg: #ffffff;
+  --accent-soft: #e3eefb;
+  --flag: #a8480a;
+  --flag-soft: #fdeede;
+  --ok: #17724a;
+  --err: #b42318;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1820;
+    --surface: #17222d;
+    --fg: #e8eef3;
+    --muted: #93a5b4;
+    --line: #2a3947;
+    --accent: #5da6ff;
+    --accent-fg: #07203d;
+    --accent-soft: #15314f;
+    --flag: #f0a463;
+    --flag-soft: #3a2713;
+    --ok: #52c98e;
+    --err: #ff8a7d;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.45 var(--font);
+  padding-block: max(16px, env(safe-area-inset-top, 0px)) max(32px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+main { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+h1 { font-size: 1.6rem; line-height: 1.15; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 1.05rem; margin: 0 0 8px; }
+.sub { color: var(--muted); margin: 4px 0 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+label { font-weight: 600; font-size: 0.9rem; }
+input[type=text], input[type=number], select, textarea {
+  width: 100%; min-height: 48px; padding: 10px 12px; font: inherit; color: var(--fg);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+}
+textarea { min-height: 190px; font-family: var(--mono); font-size: 0.88rem; line-height: 1.5; resize: vertical; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visible {
+  outline: 3px solid var(--accent); outline-offset: 2px;
+}
+.hint { color: var(--muted); font-size: 0.86rem; margin: 0; }
+.hint code { font-family: var(--mono); font-size: 0.84rem; background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.row > * { flex: 1 1 140px; min-width: 0; }
+button, .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 48px; padding: 10px 16px; font: inherit; font-weight: 600; text-decoration: none; cursor: pointer;
+  color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+}
+button.primary, .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button:disabled { opacity: 0.55; cursor: progress; }
+details > summary { cursor: pointer; font-weight: 600; min-height: 32px; display: flex; align-items: center; }
+details[open] > summary { margin-bottom: 10px; }
+#status { min-height: 1.4em; font-size: 0.92rem; color: var(--muted); }
+#status.err { color: var(--err); font-weight: 600; }
+.route { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.route-head { padding: 14px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.route-head h2 { margin: 0; }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.stats b { color: var(--fg); }
+.parts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.parts .btn { flex: 1 1 200px; }
+ol.stops { list-style: none; margin: 0; padding: 0; }
+.stop { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 4px 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); align-items: start; }
+.stop:last-child { border-bottom: 0; }
+.num { width: 34px; height: 34px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; display: grid; place-items: center; font-variant-numeric: tabular-nums; }
+.num.depot { background: var(--accent); color: var(--accent-fg); }
+.stop .who { font-weight: 600; overflow-wrap: anywhere; }
+.stop .addr { color: var(--muted); font-size: 0.92rem; overflow-wrap: anywhere; }
+.stop .meta { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.stop .actions { grid-column: 2; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 4px; }
+.stop .actions .btn { min-height: 44px; padding: 8px 14px; }
+.done-label { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; min-height: 44px; padding: 0 4px; }
+.done-label input { width: 22px; height: 22px; accent-color: var(--accent); }
+.stop.is-done .who, .stop.is-done .addr { text-decoration: line-through; opacity: 0.6; }
+.failed { border-color: var(--flag); background: var(--flag-soft); }
+.failed h2 { color: var(--flag); }
+.failed ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+.note { font-size: 0.86rem; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Bobtail Route Planner</h1>
+    <p class="sub">Pioneer Valley Propane. Every route is a loop that starts and ends at the depot.</p>
+  </header>
+
+  <section class="panel" aria-labelledby="depot-h">
+    <h2 id="depot-h">Depot (start and end)</h2>
+    <input type="text" id="depot" value="40 O'Neil St, Easthampton, MA 01027" autocomplete="off" aria-label="Depot address">
+  </section>
+
+  <section class="panel" aria-labelledby="stops-h">
+    <h2 id="stops-h">Today's stops</h2>
+    <p class="hint">One stop per line. Include the town. Optional name and gallons: <code>Name | Address | Gallons</code>. You can also paste <code>lat, lng</code> instead of an address.</p>
+    <textarea id="stops" spellcheck="false" placeholder="Smith | 12 Main St, Southampton, MA | 150&#10;88 Union St, Westfield, MA&#10;Jones | 5 Pleasant St, Hadley, MA | 220"></textarea>
+    <details>
+      <summary>Route settings</summary>
+      <div class="row">
+        <div>
+          <label for="maxstops">Max stops per route</label>
+          <input type="number" id="maxstops" min="1" max="60" value="20" inputmode="numeric">
+        </div>
+        <div>
+          <label for="maxgal">Max gallons per route (optional)</label>
+          <input type="number" id="maxgal" min="0" step="50" placeholder="no limit" inputmode="numeric">
+        </div>
+        <div>
+          <label for="linkmode">Google Maps links use</label>
+          <select id="linkmode">
+            <option value="addr">Address text</option>
+            <option value="coord">Coordinates</option>
+          </select>
+        </div>
+      </div>
+    </details>
+    <div class="row">
+      <button class="primary" id="plan" type="button">Plan routes</button>
+      <button id="sample" type="button">Load sample stops</button>
+      <button id="clear" type="button">Clear</button>
+    </div>
+    <div id="status" role="status" aria-live="polite"></div>
+  </section>
+
+  <div id="out"></div>
+  <p class="note">Addresses are located with OpenStreetMap (Photon as backup) and drive times come from the OSRM road network when reachable. If that service can't be reached, the app falls back to straight-line distance. Needs a data connection when you press Plan routes.</p>
+</main>
+
+<script>
+/* ---------- Pure logic (no DOM) ---------- */
+function parseLine(line) {
+  var parts = line.split("|").map(function (s) { return s.trim(); });
+  var name = "", addr = "", gal = null;
+  if (parts.length === 1) { addr = parts[0]; }
+  else {
+    name = parts[0]; addr = parts[1] || "";
+    if (parts[2]) { var g = parseFloat(parts[2].replace(/[^0-9.]/g, "")); if (!isNaN(g)) gal = g; }
+  }
+  if (!addr) return null;
+  var m = addr.match(/^\s*(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/);
+  var stop = { name: name, addr: addr, gal: gal, lat: null, lng: null };
+  if (m) { stop.lat = parseFloat(m[1]); stop.lng = parseFloat(m[2]); stop.manual = true; }
+  return stop;
+}
+
+function hav(a, b) {
+  var R = 6371000, t = Math.PI / 180;
+  var dLat = (b.lat - a.lat) * t, dLng = (b.lng - a.lng) * t;
+  var x = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(a.lat * t) * Math.cos(b.lat * t) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+/* Straight-line fallback: roads are roughly 30% longer than the crow flies; assume about 30 mph. */
+function fallbackMatrix(points) {
+  var n = points.length, dist = [], dur = [];
+  for (var i = 0; i < n; i++) {
+    dist.push([]); dur.push([]);
+    for (var j = 0; j < n; j++) {
+      var d = i === j ? 0 : hav(points[i], points[j]) * 1.3;
+      dist[i].push(d); dur[i].push(d / 13.4);
+    }
+  }
+  return { dist: dist, dur: dur, source: "straight-line estimate" };
+}
+
+function tourCost(order, D) {
+  var c = 0, prev = 0;
+  for (var i = 0; i < order.length; i++) { c += D[prev][order[i]]; prev = order[i]; }
+  return c + D[prev][0];
+}
+
+/* nodes: matrix indices (depot is index 0 and is not in nodes). Returns a loop order. */
+function optimizeOrder(nodes, D) {
+  var left = nodes.slice(), order = [], cur = 0;
+  while (left.length) {
+    var bi = 0, bd = Infinity;
+    for (var i = 0; i < left.length; i++) { if (D[cur][left[i]] < bd) { bd = D[cur][left[i]]; bi = i; } }
+    cur = left.splice(bi, 1)[0]; order.push(cur);
+  }
+  var best = tourCost(order, D), improved = true, guard = 0;
+  while (improved && guard++ < 60) {
+    improved = false;
+    // 2-opt: reverse a segment
+    for (var i2 = 0; i2 < order.length - 1; i2++) {
+      for (var j2 = i2 + 1; j2 < order.length; j2++) {
+        var cand = order.slice(0, i2).concat(order.slice(i2, j2 + 1).reverse(), order.slice(j2 + 1));
+        var c = tourCost(cand, D);
+        if (c < best - 1e-6) { order = cand; best = c; improved = true; }
+      }
+    }
+    // Or-opt: move one stop somewhere else in the loop
+    for (var a = 0; a < order.length; a++) {
+      var node = order[a], rest = order.slice(0, a).concat(order.slice(a + 1));
+      for (var p = 0; p <= rest.length; p++) {
+        if (p === a) continue;
+        var cand2 = rest.slice(0, p).concat([node], rest.slice(p));
+        var c2 = tourCost(cand2, D);
+        if (c2 < best - 1e-6) { order = cand2; best = c2; improved = true; break; }
+      }
+    }
+  }
+  return order;
+}
+
+/* Sweep around the depot, cut where the angular gap is widest, then split into balanced wedges. */
+function splitStops(stops, depot, maxStops, maxGal) {
+  var n = stops.length;
+  if (!n) return [];
+  var k0 = Math.cos(depot.lat * Math.PI / 180);
+  var withAngle = stops.map(function (s) {
+    return { s: s, a: Math.atan2(s.lat - depot.lat, (s.lng - depot.lng) * k0) };
+  }).sort(function (x, y) { return x.a - y.a; });
+  var gapIdx = 0, gap = -1;
+  for (var i = 0; i < n; i++) {
+    var g = withAngle[(i + 1) % n].a - withAngle[i].a;
+    if (i === n - 1) g += 2 * Math.PI;
+    if (g > gap) { gap = g; gapIdx = (i + 1) % n; }
+  }
+  var ord = withAngle.slice(gapIdx).concat(withAngle.slice(0, gapIdx)).map(function (x) { return x.s; });
+  var k = Math.max(1, Math.ceil(n / Math.max(1, maxStops)));
+  var total = ord.reduce(function (t, s) { return t + (s.gal || 0); }, 0);
+  if (maxGal > 0) k = Math.max(k, Math.ceil(total / maxGal));
+  var target = Math.ceil(n / k);
+  var routes = [[]], gal = 0;
+  ord.forEach(function (s) {
+    var cur = routes[routes.length - 1], sg = s.gal || 0;
+    if (cur.length && (cur.length >= target || (maxGal > 0 && gal + sg > maxGal))) { routes.push([]); gal = 0; }
+    routes[routes.length - 1].push(s); gal += sg;
+  });
+  return routes;
+}
+
+/* ---------- Google Maps links ---------- */
+function ref(p, mode) {
+  if (mode === "coord" && p.lat != null) return p.lat.toFixed(6) + "," + p.lng.toFixed(6);
+  return p.addr;
+}
+function mapsDir(origin, dest, waypoints) {
+  var u = "https://www.google.com/maps/dir/?api=1&travelmode=driving" +
+    "&origin=" + encodeURIComponent(origin) +
+    "&destination=" + encodeURIComponent(dest);
+  if (waypoints && waypoints.length) u += "&waypoints=" + waypoints.map(encodeURIComponent).join("%7C");
+  return u;
+}
+/* Google's link format accepts at most 9 waypoints, so long loops are cut into parts.
+   Each part starts where the last one ended, and the last part ends at the depot. */
+function routeParts(depot, stops, mode) {
+  var pts = [depot].concat(stops, [depot]);
+  var parts = [], i = 0;
+  while (i < pts.length - 1) {
+    var j = Math.min(i + 10, pts.length - 1);
+    var mid = pts.slice(i + 1, j).map(function (p) { return ref(p, mode); });
+    parts.push({
+      url: mapsDir(ref(pts[i], mode), ref(pts[j], mode), mid),
+      from: i, to: j, last: j === pts.length - 1
+    });
+    i = j;
+  }
+  return parts;
+}
+//__UI__
+</script>
+<script>
+/* ---------- UI ---------- */
+(function () {
+  var $ = function (s) { return document.querySelector(s); };
+  var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var store = {
+    get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+  var esc = function (s) {
+    return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; });
+  };
+  var busy = false, done = {};
+  try { done = JSON.parse(store.get("pvp.done") || "{}"); } catch (e) { done = {}; }
+
+  function setStatus(msg, isErr) {
+    var el = $("#status"); el.textContent = msg; el.className = isErr ? "err" : "";
+  }
+
+  function fetchJSON(url, ms) {
+    var c = new AbortController(), t = setTimeout(function () { c.abort(); }, ms || 15000);
+    return fetch(url, { signal: c.signal }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }).finally(function () { clearTimeout(t); });
+  }
+
+  /* Two free lookup services; the second is tried when the first fails or finds nothing. */
+  async function viaNominatim(addr) {
+    var j = await fetchJSON("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=us" +
+      "&viewbox=-73.6,43.0,-71.8,41.8&q=" + encodeURIComponent(addr), 15000);
+    return j.length ? { lat: parseFloat(j[0].lat), lng: parseFloat(j[0].lon) } : null;
+  }
+  async function viaPhoton(addr) {
+    var j = await fetchJSON("https://photon.komoot.io/api/?limit=1&lat=42.27&lon=-72.67&q=" + encodeURIComponent(addr), 15000);
+    var f = j && j.features && j.features[0];
+    return f ? { lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] } : null;
+  }
+  var lastNetError = "";
+  /* returns {lat,lng,fresh} or {none:true}; throws only when no service could be reached */
+  async function geocode(addr) {
+    var key = "pvp.geo:" + addr.toLowerCase().replace(/\s+/g, " ");
+    var c = store.get(key);
+    if (c) { try { var o = JSON.parse(c); o.fresh = false; return o; } catch (e) {} }
+    var res = null, reached = false, errs = [];
+    var tries = [["OpenStreetMap", viaNominatim], ["Photon", viaPhoton]];
+    for (var t = 0; t < tries.length && !res; t++) {
+      try { res = await tries[t][1](addr); reached = true; }
+      catch (e) { errs.push(tries[t][0] + ": " + (e && e.message ? e.message : e)); }
+    }
+    if (!res && !reached) { lastNetError = errs.join(" / "); throw new Error(lastNetError); }
+    if (!res) return { none: true, fresh: true };
+    store.set(key, JSON.stringify(res));
+    res.fresh = true;
+    return res;
+  }
+
+  async function roadMatrix(points) {
+    if (points.length > 100) return fallbackMatrix(points);
+    try {
+      var coords = points.map(function (p) { return p.lng.toFixed(6) + "," + p.lat.toFixed(6); }).join(";");
+      var j = await fetchJSON("https://router.project-osrm.org/table/v1/driving/" + coords + "?annotations=duration,distance", 20000);
+      if (j.code !== "Ok" || !j.durations || !j.distances) return fallbackMatrix(points);
+      var fb = fallbackMatrix(points);
+      for (var i = 0; i < points.length; i++) {
+        for (var k = 0; k < points.length; k++) {
+          if (j.durations[i][k] == null || j.distances[i][k] == null) {
+            j.durations[i][k] = fb.dur[i][k]; j.distances[i][k] = fb.dist[i][k];
+          }
+        }
+      }
+      return { dist: j.distances, dur: j.durations, source: "road network" };
+    } catch (e) {
+      return fallbackMatrix(points);
+    }
+  }
+
+  var miles = function (m) { return (m / 1609.34).toFixed(1) + " mi"; };
+  var hm = function (s) {
+    var m = Math.round(s / 60), h = Math.floor(m / 60);
+    return h ? h + " h " + (m % 60) + " min" : m + " min";
+  };
+
+  async function plan() {
+    if (busy) return;
+    var lines = $("#stops").value.split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
+    var depotAddr = $("#depot").value.trim();
+    if (!depotAddr) { setStatus("Enter the depot address first.", true); return; }
+    if (!lines.length) { setStatus("Add at least one stop.", true); return; }
+    var stops = lines.map(parseLine).filter(Boolean);
+    var maxStops = Math.max(1, parseInt($("#maxstops").value, 10) || 20);
+    var maxGal = parseFloat($("#maxgal").value) || 0;
+    var mode = $("#linkmode").value;
+    busy = true; $("#plan").disabled = true; $("#out").innerHTML = "";
+    try {
+      setStatus("Locating the depot...");
+      var dg;
+      try { dg = await geocode(depotAddr); }
+      catch (e) { setStatus("Can't reach the address lookup services (" + lastNetError + "). Open this file in the Chrome app, not a preview inside another app, and check your data connection.", true); return; }
+      if (dg.none) { setStatus("Couldn't find the depot address. Check it or enter it as lat, lng.", true); return; }
+      var depot = { name: "Pioneer Valley Propane", addr: depotAddr, lat: dg.lat, lng: dg.lng };
+      if (dg.fresh) await sleep(1100);
+
+      var failed = [], good = [];
+      for (var i = 0; i < stops.length; i++) {
+        var s = stops[i];
+        setStatus("Locating stop " + (i + 1) + " of " + stops.length + "...");
+        if (s.lat == null) {
+          var g;
+          try { g = await geocode(s.addr); }
+          catch (e) { setStatus("Lost the connection while locating stops (" + lastNetError + "). Press Plan routes to resume; found addresses are saved.", true); return; }
+          if (g.none) { failed.push(s); if (g.fresh) await sleep(1100); continue; }
+          s.lat = g.lat; s.lng = g.lng;
+          if (g.fresh) await sleep(1100);
+        }
+        good.push(s);
+      }
+      if (!good.length) { setStatus("None of the addresses could be located. Add the town and state to each line.", true); render({ depot: depot, routes: [], failed: failed, source: "" }, mode); return; }
+
+      setStatus("Optimizing " + good.length + " stops...");
+      var points = [depot].concat(good);
+      var M = await roadMatrix(points);
+      var idx = new Map(); good.forEach(function (s, n) { idx.set(s, n + 1); });
+      var groups = splitStops(good, depot, maxStops, maxGal);
+      var routes = groups.map(function (grp) {
+        var order = optimizeOrder(grp.map(function (s) { return idx.get(s); }), M.dur);
+        var seq = order.map(function (n) { return points[n]; });
+        var dist = 0, dur = 0, prev = 0;
+        order.forEach(function (n) { dist += M.dist[prev][n]; dur += M.dur[prev][n]; prev = n; });
+        dist += M.dist[prev][0]; dur += M.dur[prev][0];
+        return { stops: seq, dist: dist, dur: dur, gal: seq.reduce(function (t, s) { return t + (s.gal || 0); }, 0) };
+      });
+      // Order routes from the one that heads out earliest in the sweep; keep as split.
+      done = {}; store.set("pvp.done", "{}");
+      render({ depot: depot, routes: routes, failed: failed, source: M.source }, mode);
+      setStatus("Done: " + good.length + " stops in " + routes.length + (routes.length === 1 ? " route" : " routes") +
+        " (" + M.source + ")." + (failed.length ? " " + failed.length + " couldn't be located." : ""));
+    } finally {
+      busy = false; $("#plan").disabled = false;
+    }
+  }
+
+  var lastResult = null;
+  function render(res, mode) {
+    lastResult = res;
+    var out = [];
+    res.routes.forEach(function (r, ri) {
+      var parts = routeParts(res.depot, r.stops, mode);
+      var h = '<section class="route" aria-labelledby="r' + ri + '"><div class="route-head">' +
+        '<h2 id="r' + ri + '">Route ' + (ri + 1) + '</h2>' +
+        '<div class="stats"><span><b>' + r.stops.length + '</b> stops</span>' +
+        (r.gal ? '<span><b>' + Math.round(r.gal).toLocaleString() + '</b> gal</span>' : '') +
+        '<span><b>' + miles(r.dist) + '</b> loop</span><span><b>' + hm(r.dur) + '</b> driving</span></div>' +
+        '<div class="parts">';
+      parts.forEach(function (p, pi) {
+        var label = parts.length === 1 ? "Open whole route in Google Maps"
+          : "Part " + (pi + 1) + " of " + parts.length + ": " + (p.from === 0 ? "depot" : "stop " + p.from) + " to " + (p.last ? "depot" : "stop " + p.to);
+        h += '<a class="btn primary" target="_blank" rel="noopener" href="' + esc(p.url) + '">' + esc(label) + '</a>';
+      });
+      h += '</div></div><ol class="stops">';
+      h += '<li class="stop"><span class="num depot" aria-hidden="true">D</span><div><div class="who">Depot (start)</div><div class="addr">' + esc(res.depot.addr) + '</div></div></li>';
+      var prev = res.depot;
+      r.stops.forEach(function (s, si) {
+        var id = ri + "|" + s.addr.toLowerCase();
+        var leg = mapsDir(ref(prev, mode), ref(s, mode));
+        h += '<li class="stop' + (done[id] ? ' is-done' : '') + '" data-id="' + esc(id) + '">' +
+          '<span class="num">' + (si + 1) + '</span><div>' +
+          '<div class="who">' + esc(s.name || s.addr) + '</div>' +
+          (s.name ? '<div class="addr">' + esc(s.addr) + '</div>' : '') +
+          (s.gal ? '<div class="meta">' + s.gal + ' gal</div>' : '') + '</div>' +
+          '<div class="actions"><a class="btn primary" target="_blank" rel="noopener" href="' + esc(leg) + '">Navigate</a>' +
+          '<label class="done-label"><input type="checkbox"' + (done[id] ? ' checked' : '') + '> Done</label></div></li>';
+        prev = s;
+      });
+      var back = mapsDir(ref(prev, mode), ref(res.depot, mode));
+      h += '<li class="stop"><span class="num depot" aria-hidden="true">D</span><div><div class="who">Return to depot</div><div class="addr">' + esc(res.depot.addr) + '</div></div>' +
+        '<div class="actions"><a class="btn primary" target="_blank" rel="noopener" href="' + esc(back) + '">Navigate</a></div></li>';
+      h += '</ol></section>';
+      out.push(h);
+    });
+    if (res.routes.length) {
+      out.push('<div class="row"><button id="copy" type="button">Copy route list</button></div>');
+    }
+    if (res.failed.length) {
+      var f = '<section class="panel failed"><h2>Couldn\'t locate ' + res.failed.length + (res.failed.length === 1 ? ' stop' : ' stops') + '</h2>' +
+        '<p class="hint">Add the town and state, or paste <code>lat, lng</code>, then plan again.</p><ul>';
+      res.failed.forEach(function (s) {
+        f += '<li>' + esc(s.name ? s.name + " | " + s.addr : s.addr) + ' <a href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(s.addr) + '" target="_blank" rel="noopener">Search in Maps</a></li>';
+      });
+      out.push(f + '</ul></section>');
+    }
+    $("#out").innerHTML = out.join("");
+    var first = $("#out .route, #out .failed");
+    if (first && first.scrollIntoView) first.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function routeText() {
+    if (!lastResult) return "";
+    var t = [];
+    lastResult.routes.forEach(function (r, i) {
+      t.push("Route " + (i + 1) + " (" + r.stops.length + " stops, " + miles(r.dist) + ")");
+      t.push("Start: " + lastResult.depot.addr);
+      r.stops.forEach(function (s, n) { t.push((n + 1) + ". " + (s.name ? s.name + " - " : "") + s.addr + (s.gal ? " (" + s.gal + " gal)" : "")); });
+      t.push("End: " + lastResult.depot.addr, "");
+    });
+    return t.join("\n");
+  }
+
+  document.addEventListener("click", function (e) {
+    if (e.target && e.target.id === "copy") {
+      var text = routeText(), btn = e.target;
+      var ok = function () { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy route list"; }, 1500); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(ok, function () { btn.textContent = "Copy not allowed here"; });
+      } else { btn.textContent = "Copy not available"; }
+    }
+  });
+  document.addEventListener("change", function (e) {
+    if (e.target && e.target.type === "checkbox" && e.target.closest(".stop")) {
+      var li = e.target.closest(".stop"), id = li.getAttribute("data-id");
+      done[id] = e.target.checked; if (!done[id]) delete done[id];
+      li.classList.toggle("is-done", e.target.checked);
+      store.set("pvp.done", JSON.stringify(done));
+    }
+  });
+
+  var SAMPLE = [
+    "Easthampton City Hall | 50 Payson Ave, Easthampton, MA | 120",
+    "Northampton City Hall | 210 Main St, Northampton, MA | 180",
+    "Hadley Town Hall | 100 Middle St, Hadley, MA | 150",
+    "Amherst Town Hall | 4 Boltwood Ave, Amherst, MA | 200",
+    "South Hadley Town Hall | 116 Main St, South Hadley, MA | 90",
+    "Holyoke City Hall | 536 Dwight St, Holyoke, MA | 140",
+    "Chicopee City Hall | 274 Front St, Chicopee, MA | 110",
+    "Southampton Town Hall | 210 College Hwy, Southampton, MA | 130",
+    "Westfield City Hall | 59 Court St, Westfield, MA | 160"
+  ].join("\n");
+
+  $("#plan").addEventListener("click", plan);
+  $("#sample").addEventListener("click", function () { $("#stops").value = SAMPLE; store.set("pvp.stops", SAMPLE); setStatus("Sample stops loaded. Press Plan routes."); });
+  $("#clear").addEventListener("click", function () { $("#stops").value = ""; $("#out").innerHTML = ""; store.set("pvp.stops", ""); setStatus(""); });
+  ["stops", "depot", "maxstops", "maxgal", "linkmode"].forEach(function (id) {
+    var el = $("#" + id);
+    var saved = store.get("pvp." + id);
+    if (saved != null && saved !== "") el.value = saved;
+    el.addEventListener("input", function () { store.set("pvp." + id, el.value); });
+  });
+})();
+</script>
+<script>
+if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
+  window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+}
+</script>
+</body>
+</html>
